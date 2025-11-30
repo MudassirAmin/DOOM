@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DOOM ETERNAL LITE</title>
+    <title>DOOM ETERNAL LITE - Web Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
         
@@ -113,14 +113,70 @@
             background: rgba(10, 0, 0, 0.95);
             padding: 40px;
             border: 2px solid #ff3300;
-            cursor: pointer;
             z-index: 20;
             min-width: 400px;
             box-shadow: 0 0 20px #ff3300;
         }
+
+        /* MAP SELECTOR MENU */
+        #map-selector {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            background: rgba(5, 5, 10, 0.98);
+            padding: 30px;
+            border: 2px solid #00aaff;
+            z-index: 25;
+            min-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 0 20px #00aaff;
+        }
         
         h1 { margin: 0 0 10px 0; color: #ff3300; font-size: 3em; text-transform: uppercase; letter-spacing: 5px; }
         .key { color: #00ffff; font-weight: bold; }
+
+        .btn-main {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 15px;
+            background: #222;
+            color: white;
+            border: 1px solid #ff3300;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 1.2em;
+            font-weight: bold;
+            transition: 0.2s;
+            text-transform: uppercase;
+        }
+        .btn-main:hover { background: #ff3300; color: #000; }
+
+        .btn-map {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px;
+            background: #111;
+            color: #00aaff;
+            border: 1px solid #0055aa;
+            cursor: pointer;
+            font-family: inherit;
+            transition: 0.2s;
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
+        }
+        .btn-map:hover { background: #00aaff; color: #000; }
+        
+        .status-msg { margin-top:10px; font-size: 0.8em; color: #aaa; }
+        .error-msg { color: #ff5555; }
+        .success-msg { color: #55ff55; }
 
         /* DEBUG MENU */
         #debug-btn {
@@ -257,14 +313,30 @@
         </div>
     </div>
 
+    <!-- MAIN MENU -->
     <div id="instructions">
         <h1>SLAYER MODE</h1>
         <p><span class="key">WASD</span> Move | <span class="key">SPACE</span> Jump (x2)</p>
         <p><span class="key">SHIFT</span> Dash | <span class="key">L-CLICK</span> Super Shotgun</p>
         <br>
-        <p style="color: #aaa; font-size: 0.9em;">Kill Demons. Collect Drops. Survive.</p>
-        <br>
-        <div style="font-size: 1.5em; border: 2px solid #fff; padding: 10px; display:inline-block; background: #fff; color:#000; font-weight:bold;">CLICK TO RIP & TEAR</div>
+        <button id="btn-start" class="btn-main">PLAY DEFAULT CITY</button>
+        <button id="btn-maps" class="btn-main" style="border-color: #00aaff; color: #00aaff;">CUSTOM MAPS</button>
+        
+        <!-- Weapon Status -->
+        <div id="weapon-status" class="status-msg">Weapons: Default</div>
+    </div>
+
+    <!-- MAP SELECTOR -->
+    <div id="map-selector">
+        <h2 style="color: #00aaff; border-bottom: 1px solid #333; padding-bottom:10px;">ONLINE MAPS</h2>
+        
+        <div id="map-list-container" style="margin-bottom: 20px; text-align: left; max-height: 300px; overflow-y: auto;">
+            <div id="map-loading-msg" style="color: #aaa; text-align: center; padding: 20px;">
+                Connecting to /maps/map_list.json...
+            </div>
+        </div>
+
+        <button id="btn-cancel-map" class="btn-main" style="border-color: #555; color: #aaa; padding: 10px;">CANCEL</button>
     </div>
 
     <!-- Import Three.js -->
@@ -283,33 +355,11 @@
 
         // --- Configuration & State ---
         window.CONFIG = {
-            // Movement
-            moveSpeed: 30,
-            jumpForce: 30,
-            gravity: 70,
-            friction: 8, 
-            dashSpeed: 90,
-            dashCooldown: 1.2,
-            
-            // Player Stats
-            playerMaxHealth: 100,
-            playerStartAmmo: 20,
-            
-            // Weapons
-            shotgunDamage: 15, // Per pellet
-            shotgunPellets: 8,
-            shotgunSpread: 0.1,
-            shotgunCooldown: 1.0,
-            
-            // Enemies
-            impHp: 40,
-            impSpeed: 10,
-            soldierHp: 80,
-            soldierSpeed: 8,
-            aggroRange: 80,
-            enemyFireRate: 2.0, // Seconds
-            
-            // World
+            moveSpeed: 30, jumpForce: 30, gravity: 70, friction: 8, 
+            dashSpeed: 90, dashCooldown: 1.2,
+            playerMaxHealth: 100, playerStartAmmo: 20,
+            shotgunDamage: 15, shotgunPellets: 8, shotgunSpread: 0.1, shotgunCooldown: 1.0,
+            impHp: 40, impSpeed: 10, soldierHp: 80, soldierSpeed: 8, aggroRange: 80, enemyFireRate: 2.0,
             lavaHeight: 2
         };
 
@@ -317,12 +367,13 @@
             health: CONFIG.playerMaxHealth,
             ammo: CONFIG.playerStartAmmo,
             lastShotTime: 0,
-            isDead: false
+            isDead: false,
+            currentMap: 'default'
         };
 
         // --- Globals ---
         let camera, scene, renderer, controls;
-        let weaponGroup; // The gun model
+        let weaponGroup;
         
         // Physics
         const velocity = new THREE.Vector3();
@@ -338,8 +389,9 @@
         let lavaMesh;
         
         const moveState = { forward: false, backward: false, left: false, right: false };
-        const buildings = []; // Physics boxes
-        const buildingMeshes = []; // Visuals
+        let buildings = []; // Physics boxes (AABB)
+        let buildingMeshes = []; // Visuals
+        let scriptedObjects = []; // Objects with scripts (patrol/rotate)
         
         // Entities
         let enemies = [];
@@ -353,6 +405,9 @@
 
         init();
         initDebug();
+        // Automatically check for custom content on load
+        fetchWeaponConfigs();
+        
         animate();
 
         function init() {
@@ -373,8 +428,7 @@
             // Textures
             createProceduralTextures();
 
-            // World
-            generateCity();
+            // Default World (Will be generated on start click)
             createLava();
 
             // Player Weapon
@@ -389,18 +443,27 @@
             // Controls
             controls = new PointerLockControls(camera, document.body);
             
-            const instructions = document.getElementById('instructions');
-            instructions.addEventListener('click', () => {
-                if(!controls.isLocked && !STATE.isDead) controls.lock();
-                if(STATE.isDead) resetGame();
+            // Event Listeners for Menus
+            document.getElementById('btn-start').addEventListener('click', () => {
+                startGame('default');
+            });
+            document.getElementById('btn-maps').addEventListener('click', () => {
+                document.getElementById('instructions').style.display = 'none';
+                document.getElementById('map-selector').style.display = 'block';
+                fetchMapList(); // Fetch when menu opens
+            });
+            document.getElementById('btn-cancel-map').addEventListener('click', () => {
+                document.getElementById('map-selector').style.display = 'none';
+                document.getElementById('instructions').style.display = 'block';
             });
 
             controls.addEventListener('lock', () => {
-                instructions.style.display = 'none';
+                document.getElementById('instructions').style.display = 'none';
+                document.getElementById('map-selector').style.display = 'none';
                 document.getElementById('debug-panel').style.display = 'none';
             });
             controls.addEventListener('unlock', () => {
-                instructions.style.display = 'block';
+                if(!STATE.isDead) document.getElementById('instructions').style.display = 'block';
             });
 
             // Input
@@ -408,9 +471,201 @@
             document.addEventListener('keyup', onKeyUp);
             document.addEventListener('mousedown', onMouseDown);
             window.addEventListener('resize', onWindowResize);
+        }
 
-            // Initial Wave
-            spawnWave();
+        // ==========================================
+        //        ASSET LOADING SYSTEM
+        // ==========================================
+
+        function fetchMapList() {
+            const listContainer = document.getElementById('map-list-container');
+            const msg = document.getElementById('map-loading-msg');
+            msg.style.display = 'block';
+            msg.innerText = 'Connecting to maps/map_list.json...';
+            msg.className = '';
+
+            // 1. Look for the manifest file
+            fetch('maps/map_list.json')
+                .then(response => {
+                    if (!response.ok) throw new Error("Manifest not found");
+                    return response.json();
+                })
+                .then(fileList => {
+                    // Success!
+                    msg.style.display = 'none';
+                    // Clear old buttons (except msg)
+                    Array.from(listContainer.getElementsByTagName('button')).forEach(b => b.remove());
+
+                    if (!Array.isArray(fileList) || fileList.length === 0) {
+                        msg.innerText = "Map list is empty.";
+                        msg.style.display = 'block';
+                        return;
+                    }
+
+                    fileList.forEach(filename => {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn-map';
+                        btn.innerHTML = `<span>${filename}</span> <span class="success-msg">ONLINE</span>`;
+                        btn.onclick = () => loadMapFromServer(filename);
+                        listContainer.appendChild(btn);
+                    });
+                })
+                .catch(err => {
+                    console.warn("Map Loader:", err);
+                    msg.className = 'error-msg';
+                    msg.innerHTML = `
+                        <strong>ERROR:</strong> Could not find <code>maps/map_list.json</code>.<br><br>
+                        Since this is a website, you must create a file named 
+                        <strong>map_list.json</strong> in your maps folder 
+                        that lists your map filenames.<br>
+                        <em>Example: ["level1.json", "arena.json"]</em>
+                    `;
+                });
+        }
+
+        function loadMapFromServer(filename) {
+            fetch(`maps/${filename}`)
+                .then(res => {
+                    if(!res.ok) throw new Error("File not found");
+                    return res.json();
+                })
+                .then(mapData => {
+                    startGame('custom', mapData);
+                })
+                .catch(err => {
+                    alert("Failed to load map file: " + filename);
+                    console.error(err);
+                });
+        }
+
+        function fetchWeaponConfigs() {
+            const statusDiv = document.getElementById('weapon-status');
+            
+            // Look for weapons/weapon_list.json
+            fetch('weapons/weapon_list.json')
+                .then(res => {
+                    if(!res.ok) return null;
+                    return res.json();
+                })
+                .then(weaponFiles => {
+                    if(!weaponFiles) return; // No weapons found, stay default
+
+                    // For now, in this Lite engine, we assume the weapon files 
+                    // are JSON configs that override game constants
+                    // e.g. "super_shotgun.json" -> { "shotgunDamage": 50, "shotgunPellets": 20 }
+                    
+                    let loadedCount = 0;
+                    weaponFiles.forEach(wFile => {
+                        fetch(`weapons/${wFile}`)
+                            .then(r => r.json())
+                            .then(wData => {
+                                // Apply Overrides
+                                if(wData.shotgunDamage) CONFIG.shotgunDamage = wData.shotgunDamage;
+                                if(wData.shotgunPellets) CONFIG.shotgunPellets = wData.shotgunPellets;
+                                if(wData.shotgunSpread) CONFIG.shotgunSpread = wData.shotgunSpread;
+                                if(wData.shotgunCooldown) CONFIG.shotgunCooldown = wData.shotgunCooldown;
+                                
+                                loadedCount++;
+                                statusDiv.innerText = `Weapons: Loaded custom config from ${wFile}`;
+                                statusDiv.className = 'status-msg success-msg';
+                            });
+                    });
+                })
+                .catch(err => {
+                    // Silent fail for weapons is fine, just means using defaults
+                    console.log("No custom weapons found or invalid manifest.");
+                });
+        }
+
+        function startGame(mode, mapData) {
+            STATE.currentMap = mode;
+            
+            // Clear current level
+            clearLevel();
+            
+            if (mode === 'default') {
+                generateCity();
+                finishStart();
+            } else if (mode === 'custom' && mapData) {
+                buildLevelFromJSON(mapData);
+                finishStart();
+            }
+        }
+
+        function finishStart() {
+            document.getElementById('instructions').style.display = 'none';
+            document.getElementById('map-selector').style.display = 'none';
+            resetPlayerState();
+            spawnWave(); // Spawn enemies
+            controls.lock();
+        }
+
+        function clearLevel() {
+            // Remove old buildings/geometry
+            buildingMeshes.forEach(m => scene.remove(m));
+            buildingMeshes = [];
+            buildings = [];
+            scriptedObjects = [];
+            
+            // Remove enemies
+            enemies.forEach(e => scene.remove(e.mesh));
+            enemies = [];
+            
+            // Remove drops
+            drops.forEach(d => scene.remove(d.mesh));
+            drops = [];
+            
+            // Remove projectiles
+            projectiles.forEach(p => scene.remove(p.mesh));
+            projectiles = [];
+        }
+
+        function buildLevelFromJSON(objects) {
+            if (!Array.isArray(objects)) {
+                alert("Invalid Map Format: Root must be an array of objects.");
+                return;
+            }
+
+            console.log("Building level with " + objects.length + " objects.");
+            
+            const geometries = {
+                box: new THREE.BoxGeometry(1, 1, 1),
+                sphere: new THREE.SphereGeometry(1, 16, 16), // Base size 1 for scaling
+                cylinder: new THREE.CylinderGeometry(0.5, 0.5, 1, 16)
+            };
+
+            objects.forEach(obj => {
+                if (obj.operation === 'subtract') return; // Not supporting boolean ops in Lite version yet
+
+                const geo = geometries[obj.type] || geometries.box;
+                const mat = new THREE.MeshStandardMaterial({ color: obj.color, roughness: 0.5, metalness: 0.2 });
+                const mesh = new THREE.Mesh(geo, mat);
+
+                mesh.position.set(obj.pos.x, obj.pos.y, obj.pos.z);
+                mesh.rotation.set(obj.rot.x, obj.rot.y, obj.rot.z);
+                mesh.scale.set(obj.scl.x, obj.scl.y, obj.scl.z);
+
+                scene.add(mesh);
+                buildingMeshes.push(mesh);
+
+                // Create Physics Box (AABB)
+                // Note: Complex rotations might not have perfect collision in this Lite engine
+                const box = new THREE.Box3();
+                box.setFromObject(mesh);
+                buildings.push(box);
+
+                // Handle Scripts
+                if (obj.script && obj.script.type !== 'static') {
+                    scriptedObjects.push({
+                        mesh: mesh,
+                        box: box, // Reference to update physics
+                        data: obj.script,
+                        startPos: mesh.position.clone(),
+                        currentWpIndex: 0,
+                        waitTimer: 0
+                    });
+                }
+            });
         }
 
         function createProceduralTextures() {
@@ -469,14 +724,19 @@
             if(enemies.length > 20) return; // Cap
 
             for(let i=0; i<5; i++) {
-                // Random position above buildings
-                const rIdx = Math.floor(Math.random() * buildings.length);
-                const b = buildings[rIdx];
-                const center = new THREE.Vector3();
-                b.getCenter(center);
+                // Random position above buildings or zero if no buildings
+                let spawnPos = new THREE.Vector3((Math.random()-0.5)*100, 5, (Math.random()-0.5)*100);
+                
+                // Try to spawn on a building if they exist
+                if (buildings.length > 0) {
+                    const rIdx = Math.floor(Math.random() * buildings.length);
+                    const center = new THREE.Vector3();
+                    buildings[rIdx].getCenter(center);
+                    spawnPos.set(center.x, center.y + 5, center.z);
+                }
                 
                 const type = Math.random() > 0.6 ? 'soldier' : 'imp';
-                spawnEnemy(center.x, center.y + 5, center.z, type);
+                spawnEnemy(spawnPos.x, spawnPos.y, spawnPos.z, type);
             }
         }
 
@@ -771,28 +1031,20 @@
                 <h1 style="color:red">YOU DIED</h1>
                 <p>RIP AND TEAR... UNTIL IT IS DONE.</p>
                 <br>
-                <div style="font-size: 1.5em; border: 2px solid #fff; padding: 10px; display:inline-block;">CLICK TO RESPAWN</div>
+                <button onclick="location.reload()" class="btn-main">RESTART GAME</button>
             `;
             inst.style.display = 'block';
         }
 
-        function resetGame() {
+        function resetPlayerState() {
             STATE.health = CONFIG.playerMaxHealth;
             STATE.ammo = CONFIG.playerStartAmmo;
             STATE.isDead = false;
             
-            // Clear enemies and projectiles
-            enemies.forEach(e => scene.remove(e.mesh));
-            enemies = [];
-            projectiles.forEach(p => scene.remove(p.mesh));
-            projectiles = [];
-            
             // Respawn player
             camera.position.set(0, 50, 0);
             velocity.set(0,0,0);
-            
             updateHud();
-            spawnWave();
         }
 
         function updateDrops(delta, time) {
@@ -851,6 +1103,40 @@
         }
 
         // --- Core Loop ---
+        function updateScriptedObjects(delta) {
+            scriptedObjects.forEach(obj => {
+                const script = obj.data;
+                const mesh = obj.mesh;
+                
+                if (script.type === 'rotate') {
+                    const axis = script.axis || 'y';
+                    mesh.rotation[axis] += (script.speed || 1) * delta;
+                    obj.box.setFromObject(mesh); // Update collision box
+                } 
+                else if (script.type === 'patrol' && script.waypoints.length > 0) {
+                    const target = script.waypoints[obj.currentWpIndex];
+                    const targetVec = new THREE.Vector3(target.x, target.y, target.z);
+                    const dist = mesh.position.distanceTo(targetVec);
+
+                    if (dist < 0.5) {
+                        // Reached waypoint
+                        obj.waitTimer += delta;
+                        if (obj.waitTimer >= (target.waitTime || 0)) {
+                            obj.currentWpIndex = (obj.currentWpIndex + 1) % script.waypoints.length;
+                            obj.waitTimer = 0;
+                        }
+                    } else {
+                        // Move
+                        const dir = new THREE.Vector3().subVectors(targetVec, mesh.position).normalize();
+                        mesh.position.addScaledVector(dir, (script.speed || 5) * delta);
+                        obj.box.setFromObject(mesh); // Update collision box
+                        
+                        // Move entities standing on this platform? (Simple version: no friction)
+                        // If we wanted platforms we'd need to move player if intersects
+                    }
+                }
+            });
+        }
 
         function updatePhysics(delta) {
             if (!controls.isLocked || STATE.isDead) return;
@@ -928,6 +1214,7 @@
                 updateProjectiles(0.016);
                 updateDrops(0.016, time);
                 updateWeapon(0.016);
+                updateScriptedObjects(0.016);
             }
 
             // Lava pulse
@@ -1072,6 +1359,7 @@
         }
 
         function generateCity() {
+            console.log("Generating Default City...");
             const buildingGeometry = new THREE.BoxGeometry(1, 1, 1);
             const gridSize = 30;
             const buildingBaseSize = 10;
