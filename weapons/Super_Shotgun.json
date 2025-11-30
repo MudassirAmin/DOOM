@@ -1,0 +1,7 @@
+{
+    "name": "SuperShotGun",
+    "shotgunDamage": 200,
+    "shotgunPellets": 20,
+    "shotgunSpread": 0.5,
+    "shotgunCooldown": 0.4
+}
